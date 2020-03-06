@@ -31,7 +31,7 @@ end
 
 Base.size(x::KeyedArray) = size(parent(x))
 
-Base.axes(x::KeyedArray) = axes(parent(x))
+# Base.axes(x::KeyedArray) = axes(parent(x))
 
 Base.parent(x::KeyedArray) = getfield(x, :data)
 keyless(x::KeyedArray) = parent(x)
