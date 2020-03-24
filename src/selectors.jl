@@ -1,4 +1,6 @@
 
+using InvertedIndices # needs only Base.to_indices in struct.jl to work
+
 using IntervalSets
 
 findindex(s::Interval, r::AbstractVector) = findall(i -> i in s, r)
@@ -55,7 +57,7 @@ struct Index{T} <: Selector{T}
     ind::T
 end
 
-Base.show(io::IO, s::Index{T}) where {T} = print(io, "Index(",s.ind, ")")
+Base.show(io::IO, s::Index{T}) where {T} = print(io, "Index[",s.ind, "]")
 
 Base.getindex(::Type{Index}, i) = Index(i)
 
@@ -68,3 +70,10 @@ Base.lastindex(::Type{Index}) = LastIndex()
 Index(::LastIndex) = LastIndex()
 
 findindex(sel::LastIndex, range::AbstractArray) = lastindex(range)
+
+if VERSION >= v"1.4" # same thing for Index[begin]
+    struct FirstIndex <: Selector{Int} end
+    Base.firstindex(::Type{Index}) = FirstIndex()
+    Index(::FirstIndex) = FirstIndex()
+    findindex(sel::FirstIndex, range::AbstractArray) = firstindex(range)
+end

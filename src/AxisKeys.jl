@@ -5,6 +5,8 @@ export KeyedArray, axiskeys
 
 include("axes.jl")
 
+include("lookup.jl")
+
 include("names.jl")
 export NamedDimsArray, dimnames
 
@@ -12,7 +14,7 @@ include("wrap.jl")
 export wrapdims
 
 include("selectors.jl")
-export Near, Index, Interval
+export Near, Index, Interval, Not
 
 include("functions.jl")
 

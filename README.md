@@ -2,27 +2,27 @@
 
 [![Build Status](https://travis-ci.org/mcabbott/AxisKeys.jl.svg?branch=master)](https://travis-ci.org/mcabbott/AxisKeys.jl)
 
+<!--<img src="docs/readmefigure.png" alt="block picture" width="400" align="right">-->
+
 This package defines a thin wrapper which, alongside any array, stores a vector of "keys" 
 for each dimension. This may be useful to store perhaps actual times of measurements, 
 or some strings labeling columns, etc. These will be propagated through many 
 operations on arrays, including broadcasting, `map`, comprehensions, `sum` etc.
 
-It works closely with [NamedDims.jl](https://github.com/invenia/NamedDims.jl), 
+It works closely with [NamedDims.jl](https://github.com/invenia/NamedDims.jl), another wrapper 
 which attaches names to dimensions. These names are a tuple of symbols, like those of 
 a `NamedTuple`. They can be used for specifying which dimensions to sum over, etc.
-
-The function `wrapdims` constructs a nested pair of these wrappers,
-for example: 
+The function `wrapdims` constructs a nested pair of these wrappers, for example: 
 
 ```julia
 using AxisKeys
 data = rand(Int8, 2,10,3) .|> abs;
-A = wrapdims(data; channel=[:left, :right], time=range(13, step=2.5, length=10), iter=31:33)
+A = KeyedArray(data; channel=[:left, :right], time=range(13, step=2.5, length=10), iter=31:33)
 ```
 
-<center>
-<img src="docs/readmeterminal.png" alt="??" width="600" align="center"></img>
-</center>
+<p align="center">
+<img src="docs/readmeterminal.png" alt="terminal pretty printing" width="550" align="center">
+</p>
 
 ### Selections
 
@@ -48,14 +48,14 @@ There are also a numer of special selectors, which work like this:
 |-----------------|------------------|-------------------------|---------|
 | one nearest     | `B[time = 3]`    | `B(time = Near(17.0))`  | vector  |
 | all in a range  | `B[2:5, :]`      | `B(Interval(14,25), :)` | matrix  |
-| all matching    | `B[3:end, 3:3]`  | `B(>(17), ==(33))`      | matrix  |
+| all matching    | `B[3:end, Not(3)]` | `B(>(17), !=(33))`      | matrix  |
 | mixture         | `A[1, 2, end]`   | `A(:left, Index[2], Index[end])` | scalar |
 | non-scalar      | `B[iter=[1, 3]]` | `B(iter=[31, 33])`      | matrix  |
 
 Here `Interval(13,18)` can also be written `13..18`, it's from [IntervalSets.jl](https://github.com/JuliaMath/IntervalSets.jl). 
 Any functions can be used to select keys, including lambdas: `B(time = t -> 0<t<17)`. 
 You may give just one `::Base.Fix2` function 
-(such as `<=(18)` or `!=(20)`) provided its argument type matches the keys of one dimension.
+(such as `<=(18)` or `==(20)`) provided its argument type matches the keys of one dimension.
 An interval or a function always selects via `findall`, 
 i.e. it does not drop a dimension, even if there is exactly one match. 
 
@@ -67,24 +67,27 @@ as a trailing colon makes a zero-dimensional view.
 
 (Possibly selectors should be made to work in square brackets too,
 allowing mixed indexing `B[1, Key('β')] == B(Index[1], 'β')` 
-and `setkey!` via `B[Key(13.0), Key('α')] = 0`. But they don't right now.)
+and `setkey!` via `B[Key(13.0), Key('α')] = 0`. But they don't right now,
+see [PR#5](https://github.com/mcabbott/AxisKeys.jl/pull/5) for an attempt.)
 
 ### Construction
 
 ```julia
-KeyedArray(rand(Int8, 2,10), ([:a, :b], 10:10:100))
+KeyedArray(rand(Int8, 2,10), ([:a, :b], 10:10:100)) # AbstractArray, Tuple{AbstractVector, ...}
 ```
 
-A nested pair with names can be constructed with keywords, 
-and (apart from a few bugs) this should work the same in either order:
+A nested pair with names can be constructed with keywords for names,
+and (apart from a few bugs) everything should work the same way in either order:
 
 ```julia
 KeyedArray(rand(Int8, 2,10), row=[:a, :b], col=10:10:100)     # KeyedArray(NamedDimsArray(...))
 NamedDimsArray(rand(Int8, 2,10), row=[:a, :b], col=10:10:100) # NamedDimsArray(KeyedArray(...))
 ```
 
-The function `wrapdims` does a bit more checking and fixing. 
-It will adjust the length of key vectors if it can, and their indexing if needed to match the array:
+The function `wrapdims` does a bit more checking and fixing, but is not type-stable. 
+It will adjust the length of ranges of keys if it can, 
+and will fix indexing offsets if needed to match the array. 
+The resulting order of wrappers is controlled by `AxisKeys.nameouter()=false`.
 
 ```julia
 wrapdims(rand(Int8, 10), alpha='a':'z') 
@@ -98,26 +101,26 @@ axiskeys(ans,1) # 10:10:100 with indices 0:9
 
 As usual `axes(A)` returns (a tuple of vectors of) indices, 
 and `axiskeys(A)` returns (a tuple of vectors of) keys.
-If the array has names, then `dimnames(A)` returns them, 
-and functions like `axes(A, name)` give just one.
+If the array has names, then `dimnames(A)` returns them.
+These functions work like `size(A, d) = size(A, name)` to get just one.
 
 Many functions should work, for example:
-
-* Reductions like `sum(A; dims=:channel)` can use dimension names. 
-  Likewise `prod`, `mean` etc., and `dropdims`.
 
 * Broadcasting `log.(A)` and `map(log, A)`, as well as comprehensions 
   `[log(x) for x in A]` should all work. 
 
-* Transpose etc, `permutedims`.  
+* Transpose etc, `permutedims`, `mapslices`.
 
 * Concatenation `hcat(B, B .+ 100)` works. 
   Note that the keys along the glued direction may not be unique afterwards.
 
+* Reductions like `sum(A; dims=:channel)` can use dimension names. 
+  Likewise `prod`, `mean` etc., and `dropdims`.
+
 * Some linear algebra functions like `*` and `\` will work. 
 
 * Getproperty returns the key vector, to allow things like
-  `for (i,t) in enumerate(A.time); fun(A[i], t); ...`.
+  `for (i,t) in enumerate(A.time); fun(val = A[i,:], time = t); ...`.
 
 * Vectors support `push!(V, val)`, which will try to extend the key vector. 
   There is also a method `push!(V, key => val)` which pushes in a new key. 
@@ -125,8 +128,14 @@ Many functions should work, for example:
 To allow for this limited mutability, `V.keys isa Ref` for vectors, 
 while `A.keys isa Tuple` for matrices & higher. But `axiskeys(A)` always returns a tuple.
 
-* [LazyStack](https://github.com/mcabbott/LazyStack.jl)`.stack` is now hooked up.
-  Stacks of named tuples like `stack((a=i, b=i^2) for i=1:3)` create axis keys.
+* Named tuples can be converted to and from keyed vectors,
+  with `collect(keys(nt)) == Symbol.(axiskeys(V),1)`
+
+* [LazyStack](https://github.com/mcabbott/LazyStack.jl)`.stack` understands names and keys.
+  Stacks of named tuples like `stack((a=i, b=i^2) for i=1:5)` create a matrix with `[:a, :b]`.
+
+* [NamedPlus](https://github.com/mcabbott/NamedPlus.jl) has a macro which works on comprehensions:
+  `@named [n^pow for n=1:10, pow=0:2:4]` has names and keys.
 
 ### Absent
 
@@ -234,4 +243,4 @@ In 🐍-land:
   [DataFrames](https://github.com/JuliaData/DataFrames.jl), only one- and two-dimensional.
   Writes indexing "by position" as `df.iat[1, 1]` for scalars or `df.iloc[1:3, :]` allowing slices,
   and lookup "by label" as `df.at[dates[0], 'A']` for scalars or `df.loc['20130102':'20130104', ['A', 'B']]` for slices, "both endpoints are *included*" in this.
-
+  See also [Pandas.jl](https://github.com/JuliaPy/Pandas.jl) for a wrapper.
